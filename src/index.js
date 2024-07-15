@@ -7,32 +7,41 @@ const dockerHub = "https://registry-1.docker.io";
 
 const routes = {
   // production
-  "docker.libcuda.so": dockerHub,
-  "quay.libcuda.so": "https://quay.io",
-  "gcr.libcuda.so": "https://gcr.io",
-  "k8s-gcr.libcuda.so": "https://k8s.gcr.io",
-  "k8s.libcuda.so": "https://registry.k8s.io",
-  "ghcr.libcuda.so": "https://ghcr.io",
-  "cloudsmith.libcuda.so": "https://docker.cloudsmith.io",
-  "ecr.libcuda.so": "https://public.ecr.aws",
+  "docker.io": dockerHub,
+  "quay.io": "https://quay.io",
+  "gcr.io": "https://gcr.io",
+  "k8s.gcr.io": "https://k8s.gcr.io",
+  "k8s.io": "https://registry.k8s.io",
+  "ghcr.io": "https://ghcr.io",
+  "cloudsmith.io": "https://docker.cloudsmith.io",
+  "ecr.aws": "https://public.ecr.aws",
 
-  // staging
-  "docker-staging.libcuda.so": dockerHub,
 };
 
-function routeByHosts(host) {
-  if (host in routes) {
-    return routes[host];
-  }
-  if (MODE == "debug") {
-    return TARGET_UPSTREAM;
-  }
-  return "";
-}
+// function routeByHosts(host) {
+//   if (host in routes) {
+//     return routes[host];
+//   }
+//   if (MODE == "debug") {
+//     return TARGET_UPSTREAM;
+//   }
+//   return "";
+// }
+
+// url = https://docker.test.com/docker.io/nginx/nginx
 
 async function handleRequest(request) {
   const url = new URL(request.url);
-  const upstream = routeByHosts(url.hostname);
+  const hostname = url.hostname
+  const match = url.match(/^https?:\/\/[^/]+\/([^/]+)\//);
+  let up = ""
+  if (match) {
+    up = match[1];
+  } else {
+    up = "docker.io";
+  }
+  const upstream = routes[up];
+  
   if (upstream === "") {
     return new Response(
       JSON.stringify({
@@ -43,9 +52,16 @@ async function handleRequest(request) {
       }
     );
   }
+
+  // upstream == https://registry-1.docker.io
+  // up = docker.io
+
   const isDockerHub = upstream == dockerHub;
   const authorization = request.headers.get("Authorization");
+  // let partten1 = `/${upstream}/v2/`
+  // if (url.pathname == `/${up}/v2/`) {
   if (url.pathname == "/v2/") {
+    // const newUrl = new URL(`https://${hostname}/${up}/v2/`);
     const newUrl = new URL(upstream + "/v2/");
     const headers = new Headers();
     if (authorization) {
@@ -78,6 +94,7 @@ async function handleRequest(request) {
     }
   }
   // get token
+  // if (url.pathname == `"/${up}/v2/auth"`) {
   if (url.pathname == "/v2/auth") {
     const newUrl = new URL(upstream + "/v2/");
     const resp = await fetch(newUrl.toString(), {
@@ -106,17 +123,21 @@ async function handleRequest(request) {
   }
   // redirect for DockerHub library images
   // Example: /v2/busybox/manifests/latest => /v2/library/busybox/manifests/latest
+  // Example: docker.test.com/docker.io/v2/busybox/manifests/latest => docker.test.com/v2/library/busybox/manifests/latest
+  // url = https://docker.test.com/docker.io/nginx/nginx
   if (isDockerHub) {
     const pathParts = url.pathname.split("/");
-    if (pathParts.length == 5) {
-      pathParts.splice(2, 0, "library");
+    if (pathParts.length == 6) {
+      pathParts.splice(3, 0, "library");
       const redirectUrl = new URL(url);
       redirectUrl.pathname = pathParts.join("/");
-      return Response.redirect(redirectUrl, 301);
+      return Response.redirect(redirectUrl, 302);
     }
   }
   // foward requests
-  const newUrl = new URL(upstream + url.pathname);
+  // https://registry-1.docker.io/docker.io/...  --> https://registry-1.docker.io/...
+  // const newUrl = new URL(upstream + url.pathname);
+  const newUrl = new URL(upstream + url.pathname.replace(`"/${up}"`,""));
   const newReq = new Request(newUrl, {
     method: request.method,
     headers: request.headers,
