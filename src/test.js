@@ -15,7 +15,7 @@ if (match) {
 
     console.log("第一个参数：", firstParam);
     console.log("第二个参数：", url2.hostname);
-    console.log("第3个参数：", updatedPathname);
+    console.log("第3个参数：", url.replace("https:\/\/", ""));
 } else {
     console.log("未找到匹配的参数");
 }
